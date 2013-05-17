@@ -1,4 +1,9 @@
 HTMLParts
 =========
 
-A small HTML prototype tool written in nodejs
+A small HTML prototype tool written in <a href="http://nodejs.org/">nodejs</a>
+
+Check index.htm for an example of what to do with HTMLParts.
+
+The basic idea was to make it possible to make include files (like in PHP etc) 
+when building small, hardcoded HTML prototypes.
