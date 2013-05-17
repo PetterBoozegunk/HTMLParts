@@ -8,7 +8,7 @@
         path = require("path"),
         filesys = require("fs"),
         url = require("url"),
-        port = 666,
+        port = 8080,
 
         util,
         resp;
@@ -122,7 +122,7 @@
             });
         },
         createServer : function (request, response) {
-            var reqUrl = (request.url === "/") ? "/index.html" : request.url,
+            var reqUrl = (request.url === "/") ? "/index.htm" : request.url,
                 pathName = url.parse(reqUrl).pathname,
                 fullPath = path.join(process.cwd(), pathName),
                 headers = util.getHeaders(fullPath);
