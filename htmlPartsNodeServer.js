@@ -1,5 +1,4 @@
 ﻿/*jslint node: true */
-
 (function () {
     "use strict";
 
@@ -9,6 +8,8 @@
         filesys = require("fs"),
         url = require("url"),
         port = 8080,
+        
+        matchPart = /(<\%=)(\s+)?part\(['"][\w\.\/]+['"]\)(\s+)?(\%>)/g,
 
         util,
         resp;
@@ -23,7 +24,7 @@
 
             if (isHtml) {
                 fileString = data.toString("utf-8");
-                parts = fileString.match(/(<\%=)(\s+)?part\(['"][\w\.\/]+['"]\)(\s+)?(\%>)/g);
+                parts = fileString.match(matchPart);
 
                 if (parts) {
                     util.getParts(fileString, parts, response, 0);
@@ -79,7 +80,7 @@
         getParts : function (fileString, parts, response, i) {
             var index = i || 0,
                 length = parts.length,
-                hasParts = fileString.match(/(<\%=)(\s+)?part\(['"][\w\.\/]+['"]\)(\s+)?(\%>)/g);
+                hasParts = fileString.match(matchPart);
 
             if (index < length) {
                 util.getPart(fileString, parts, response, index);
