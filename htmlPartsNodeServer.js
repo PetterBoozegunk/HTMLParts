@@ -8,7 +8,7 @@
         filesys = require("fs"),
         url = require("url"),
         port = 8080,
-        
+
         matchPart = /(<\%=)(\s+)?part\(['"][\w\.\/]+['"]\)(\s+)?(\%>)/g,
 
         util,
