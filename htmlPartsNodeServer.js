@@ -78,10 +78,13 @@
         },
         getParts : function (fileString, parts, response, i) {
             var index = i || 0,
-                length = parts.length;
+                length = parts.length,
+                hasParts = fileString.match(/(<\%=)(\s+)?part\(['"][\w\.\/]+['"]\)(\s+)?(\%>)/g);
 
             if (index < length) {
                 util.getPart(fileString, parts, response, index);
+            } else if (index === length && hasParts) {
+                util.getPart(fileString, hasParts, response, 0);
             } else {
                 response.write(fileString);
                 response.end();
