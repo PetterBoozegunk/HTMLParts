@@ -7,7 +7,7 @@
         path = require("path"),
         filesys = require("fs"),
         url = require("url"),
-        
+
         hostname = "localhost",
         port = 8080,
         defaultfile = "index.htm",
