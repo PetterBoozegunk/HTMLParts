@@ -103,11 +103,21 @@
             return type;
         },
         getHeaders : function (fullPath) {
-            var type = util.getType(fullPath);
+            var type = util.getType(fullPath),
 
-            return {
-                "Content-Type": type
-            };
+                now = new Date(),
+                year = now.getFullYear(),
+                month = now.getMonth(),
+                date = now.getDate(),
+
+                headers = {
+                    "Content-Type": type,
+                    "Cache-Control": "public, max-age=345600", // 4 days
+                    "Date": now.toUTCString(),
+                    "Expires": new Date(parseInt(year + 1, 10), month, date).toUTCString()
+                };
+
+            return headers;
         },
         readFile : function (fullPath, response, headers) {
             filesys.readFile(fullPath, function (error, data) {
@@ -134,7 +144,7 @@
         }
     };
 
-    http.createServer(util.createServer).listen(port, hostname);
+    exports.server = http.createServer(util.createServer).listen(port, hostname);
 
     sys.puts("Server Running on " + hostname + ":" + port);
 }());
