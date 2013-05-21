@@ -7,6 +7,8 @@
         path = require("path"),
         filesys = require("fs"),
         url = require("url"),
+        
+        hostname = "localhost",
         port = 8080,
 
         matchPart = /(<\%=)(\s+)?part\(['"][\w\.\/]+['"]\)(\s+)?(\%>)/g,
@@ -131,7 +133,7 @@
         }
     };
 
-    http.createServer(util.createServer).listen(port);
+    http.createServer(util.createServer).listen(port, hostname);
 
-    sys.puts("Server Running on http://127.0.0.1:" + port);
+    sys.puts("Server Running on " + hostname + ":" + port);
 }());
