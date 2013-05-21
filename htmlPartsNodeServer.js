@@ -58,20 +58,10 @@
                 htmlPart;
 
             filesys.readFile(fullPath, function (error, data) {
-                var splitStr = fileString.toString("utf-8").split(parts[i]),
-                    index,
-                    length = splitStr.length;
-
-                if (!error && splitStr.length > 1) {
+                if (!error) {
                     htmlPart = data.toString("utf-8");
-
-                    for (index = 0; index < length; index += 1) {
-                        if (!index) {
-                            newFileString = splitStr[index];
-                        } else {
-                            newFileString += htmlPart + splitStr[index];
-                        }
-                    }
+                    
+                    newFileString = fileString.replace(parts[i], htmlPart);
                 }
 
                 util.getParts(newFileString, parts, response, nextIndex);
