@@ -10,6 +10,7 @@
         
         hostname = "localhost",
         port = 8080,
+        defaultfile = "index.htm",
 
         matchPart = /(<\%=)(\s+)?part\(['"][\w\.\/]+['"]\)(\s+)?(\%>)/g,
 
@@ -118,7 +119,7 @@
             });
         },
         createServer : function (request, response) {
-            var reqUrl = (request.url === "/") ? "/index.htm" : request.url,
+            var reqUrl = (request.url === "/") ? "/" + defaultfile : request.url,
                 pathName = url.parse(reqUrl).pathname,
                 fullPath = path.join(process.cwd(), pathName),
                 headers = util.getHeaders(fullPath);
