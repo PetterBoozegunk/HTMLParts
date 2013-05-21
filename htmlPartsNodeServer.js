@@ -60,7 +60,7 @@
             filesys.readFile(fullPath, function (error, data) {
                 if (!error) {
                     htmlPart = data.toString("utf-8");
-                    
+
                     newFileString = fileString.replace(parts[i], htmlPart);
                 }
 
