@@ -19,6 +19,16 @@
         resp;
 
     resp = {
+        gzip : function (data, response) {
+            var buffe = new Buffer(data, 'utf-8');
+
+            zlib.gzip(buffe, function () {
+                var args = arguments,
+                    result = args[1];
+
+                response.end(result);
+            });
+        },
         "200" : function (response, data, headers) {
             var isHtml = (headers["Content-Type"] === "text/html"),
                 parts,
@@ -33,12 +43,10 @@
                 if (parts) {
                     util.getParts(fileString, parts, response, 0);
                 } else {
-                    response.write(data);
-                    response.end();
+                    resp.gzip(data, response);
                 }
             } else {
-                response.write(data);
-                response.end();
+                resp.gzip(data, response);
             }
         },
         "404" : function (response, headers) {
@@ -74,22 +82,14 @@
         getParts : function (fileString, parts, response, i) {
             var index = i || 0,
                 length = parts.length,
-                hasParts = fileString.match(matchPart),
-                buffe;
+                hasParts = fileString.match(matchPart);
 
             if (index < length) {
                 util.getPart(fileString, parts, response, index);
             } else if (index === length && hasParts) {
                 util.getPart(fileString, hasParts, response, 0);
             } else {
-                buffe = new Buffer(fileString, 'utf-8');
-
-                zlib.gzip(buffe, function () {
-                    var args = arguments,
-                        result = args[1];
-
-                    response.end(result);
-                });
+                resp.gzip(fileString, response);
             }
         },
         getType : function (fullPath) {
