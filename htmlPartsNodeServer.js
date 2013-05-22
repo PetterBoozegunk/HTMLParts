@@ -2,7 +2,8 @@
 (function () {
     "use strict";
 
-    var sys = require("sys"),
+    var zlib = require('zlib'),
+        sys = require("sys"),
         http = require("http"),
         path = require("path"),
         filesys = require("fs"),
@@ -73,15 +74,22 @@
         getParts : function (fileString, parts, response, i) {
             var index = i || 0,
                 length = parts.length,
-                hasParts = fileString.match(matchPart);
+                hasParts = fileString.match(matchPart),
+                buffe;
 
             if (index < length) {
                 util.getPart(fileString, parts, response, index);
             } else if (index === length && hasParts) {
                 util.getPart(fileString, hasParts, response, 0);
             } else {
-                response.write(fileString);
-                response.end();
+                buffe = new Buffer(fileString, 'utf-8');
+
+                zlib.gzip(buffe, function () {
+                    var args = arguments,
+                        result = args[1];
+
+                    response.end(result);
+                });
             }
         },
         getType : function (fullPath) {
@@ -112,6 +120,7 @@
 
                 headers = {
                     "Content-Type": type,
+                    "Content-Encoding": "gzip",
                     "Cache-Control": "public, max-age=345600", // 4 days
                     "Date": now.toUTCString(),
                     "Expires": new Date(parseInt(year + 1, 10), month, date).toUTCString()
