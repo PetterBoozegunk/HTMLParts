@@ -1,4 +1,4 @@
-﻿/*jslint node: true */
+/*jslint node: true */
 (function () {
     "use strict";
 
@@ -6,7 +6,7 @@
         sys = require("sys"),
         http = require("http"),
         path = require("path"),
-        filesys = require("fs"),
+        fs = require("fs"),
         url = require("url"),
 
         hostname = "localhost",
@@ -16,37 +16,48 @@
         matchPart = /(<\%=)(\s+)?part\(['"][\w\.\/]+['"]\)(\s+)?(\%>)/g,
 
         util,
-        resp;
+        resp,
+
+        partFiles;
+
+    partFiles = {
+        changed : false,
+        watch : {}
+    };
 
     resp = {
-        gzip : function (data, response) {
-            var buffe = new Buffer(data, 'utf-8');
+        gzip : function (data, response, headers) {
+            var buffe = new Buffer(data, "utf-8");
 
             zlib.gzip(buffe, function () {
                 var args = arguments,
                     result = args[1];
-
+                
+                response.setHeader('Content-Length', result.length);
+                response.writeHead(200, headers);
+                
+                partFiles.changed = false;
                 response.end(result);
             });
         },
-        "200" : function (response, data, headers) {
+        "200" : function (response, data, headers, etag) {
             var isHtml = (headers["Content-Type"] === "text/html"),
                 parts,
                 fileString;
 
-            response.writeHead(200, headers);
+            response.setHeader('ETag', etag);
 
             if (isHtml) {
                 fileString = data.toString("utf-8");
                 parts = fileString.match(matchPart);
 
                 if (parts) {
-                    util.getParts(fileString, parts, response, 0);
+                    util.getParts(fileString, parts, response, 0, headers);
                 } else {
-                    resp.gzip(data, response);
+                    resp.gzip(data, response, headers);
                 }
             } else {
-                resp.gzip(data, response);
+                resp.gzip(data, response, headers);
             }
         },
         "404" : function (response, headers) {
@@ -62,36 +73,44 @@
     };
 
     util = {
-        getPart : function (fileString, parts, response, i) {
+        getPart : function (fileString, parts, response, i, headers) {
             var partUrl = parts[i].match(/["'][\w\_\/\.]+["']/).join().replace(/['"]/g, ""),
                 fullPath = path.join(process.cwd(), partUrl),
                 nextIndex = parseInt(i + 1, 10),
                 newFileString = fileString,
                 htmlPart;
 
-            filesys.readFile(fullPath, function (error, data) {
+            fs.readFile(fullPath, function (error, data) {
                 if (error) {
                     htmlPart = "<div style=\"color: red; background: #ffe2e7; padding: 5px 10px; border: solid 1px red;\">The file \"" + fullPath + "\" does not exist</div>";
                 } else {
                     htmlPart = data.toString("utf-8");
+
+                    if (!partFiles.watch[fullPath]) {
+                        partFiles.watch[fullPath] = true;
+
+                        fs.watch(fullPath, function () {
+                            partFiles.changed = true;
+                        });
+                    }
                 }
 
                 newFileString = fileString.replace(parts[i], htmlPart);
 
-                util.getParts(newFileString, parts, response, nextIndex);
+                util.getParts(newFileString, parts, response, nextIndex, headers);
             });
         },
-        getParts : function (fileString, parts, response, i) {
+        getParts : function (fileString, parts, response, i, headers) {
             var index = i || 0,
                 length = parts.length,
                 hasParts = fileString.match(matchPart);
 
             if (index < length) {
-                util.getPart(fileString, parts, response, index);
+                util.getPart(fileString, parts, response, index, headers);
             } else if (index === length && hasParts) {
-                util.getPart(fileString, hasParts, response, 0);
+                util.getPart(fileString, hasParts, response, 0, headers);
             } else {
-                resp.gzip(fileString, response);
+                resp.gzip(fileString, response, headers);
             }
         },
         getType : function (fullPath) {
@@ -130,12 +149,12 @@
 
             return headers;
         },
-        readFile : function (fullPath, response, headers) {
-            filesys.readFile(fullPath, function (error, data) {
+        readFile : function (fullPath, response, headers, etag) {
+            fs.readFile(fullPath, function (error, data) {
                 if (error) {
                     resp["500"](response, error, headers);
                 } else {
-                    resp["200"](response, data, headers);
+                    resp["200"](response, data, headers, etag);
                 }
             });
         },
@@ -149,7 +168,20 @@
                 if (!exists) {
                     resp["404"](response, headers);
                 } else {
-                    util.readFile(fullPath, response, headers);
+                    fs.stat("." + request.url, function () {
+                        var args = arguments,
+                            stat = args[1],
+                            etag = stat.size + "-" + Date.parse(stat.mtime);
+
+                        response.setHeader('Last-Modified', stat.mtime);
+
+                        if (!partFiles.changed && request.headers['if-none-match'] === etag) {
+                            response.statusCode = 304;
+                            response.end();
+                        } else {
+                            util.readFile(fullPath, response, headers, etag);
+                        }
+                    });
                 }
             });
         }
