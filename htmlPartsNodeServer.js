@@ -171,11 +171,13 @@
                     fs.stat("." + request.url, function () {
                         var args = arguments,
                             stat = args[1],
-                            etag = stat.size + "-" + Date.parse(stat.mtime);
+                            etag = stat ? stat.size + "-" + Date.parse(stat.mtime) : "";
 
-                        response.setHeader('Last-Modified', stat.mtime);
+                        if (stat) {
+                            response.setHeader('Last-Modified', stat.mtime);
+                        }
 
-                        if (!partFiles.changed && request.headers['if-none-match'] === etag) {
+                        if (!partFiles.changed && etag && request.headers['if-none-match'] === etag) {
                             response.statusCode = 304;
                             response.end();
                         } else {
