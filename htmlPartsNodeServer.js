@@ -70,11 +70,13 @@
                 htmlPart;
 
             filesys.readFile(fullPath, function (error, data) {
-                if (!error) {
+                if (error) {
+                    htmlPart = "<div style=\"color: red; background: #ffe2e7; padding: 5px 10px; border: solid 1px red;\">The file \"" + fullPath + "\" does not exist</div>";
+                } else {
                     htmlPart = data.toString("utf-8");
-
-                    newFileString = fileString.replace(parts[i], htmlPart);
                 }
+
+                newFileString = fileString.replace(parts[i], htmlPart);
 
                 util.getParts(newFileString, parts, response, nextIndex);
             });
@@ -96,9 +98,9 @@
             var type = "text/plain",
                 tlc = fullPath.toLowerCase(),
 
-                isHtml = /\.htm[l]?$/.test(tlc),
-                isCss = /\.css$/.test(tlc),
-                isSvg = /\.svg/.test(tlc);
+                isHtml = /\.htm[l]?$/i.test(tlc),
+                isCss = /\.css$/i.test(tlc),
+                isSvg = /\.svg/i.test(tlc);
 
             if (isHtml) {
                 type = "text/html";
