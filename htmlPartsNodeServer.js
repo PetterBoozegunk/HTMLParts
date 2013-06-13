@@ -32,10 +32,10 @@
             zlib.gzip(buffe, function () {
                 var args = arguments,
                     result = args[1];
-                
+
                 response.setHeader('Content-Length', result.length);
                 response.writeHead(200, headers);
-                
+
                 partFiles.changed = false;
                 response.end(result);
             });
