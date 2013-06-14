@@ -2,23 +2,38 @@
 (function () {
     "use strict";
 
-    var zlib = require('zlib'),
+    var webConfig = {
+            hostname : "localhost",
+            port : 8080,
+            defaultfile : "index.htm"
+        },
+        zlib = require('zlib'),
         sys = require("sys"),
         http = require("http"),
         path = require("path"),
         fs = require("fs"),
         url = require("url"),
 
-        hostname = "localhost",
-        port = 8080,
-        defaultfile = "index.htm",
-
         matchPart = /(<\%=)(\s+)?part\(['"][\w\.\/]+['"]\)(\s+)?(\%>)/g,
 
         util,
         resp,
+        partFiles,
+        createRnRObject; // RnR = Request aNd Response
 
-        partFiles;
+    createRnRObject = function (request, response) {
+        var rnrObject = {
+            "request" : request,
+            "response" : response
+        };
+
+        rnrObject.reqUrl = (rnrObject.request.url === "/") ? "/" + webConfig.defaultfile : rnrObject.request.url;
+        rnrObject.pathName = url.parse(rnrObject.reqUrl).pathname;
+        rnrObject.fullPath = path.join(process.cwd(), rnrObject.pathName);
+        rnrObject.headers = util.getHeaders(rnrObject.fullPath);
+
+        return rnrObject;
+    };
 
     partFiles = {
         changed : false,
@@ -26,58 +41,52 @@
     };
 
     resp = {
-        gzip : function (data, response, headers) {
-            var buffe = new Buffer(data, "utf-8");
+        gzip : function (rnrObject) {
+            var buffe = new Buffer(rnrObject.data, "utf-8");
 
             zlib.gzip(buffe, function () {
                 var args = arguments,
                     result = args[1];
 
-                response.setHeader('Content-Length', result.length);
-                response.writeHead(200, headers);
+                rnrObject.headers["Content-Length"] = result.length;
+                rnrObject.response.writeHead(rnrObject.statusCode, rnrObject.headers);
 
                 partFiles.changed = false;
-                response.end(result);
+                rnrObject.response.end(result);
             });
         },
-        "200" : function (response, data, headers, etag) {
-            var isHtml = (headers["Content-Type"] === "text/html"),
-                parts,
-                fileString;
+        "200" : function (rnrObject) {
+            var isHtml = (rnrObject.headers["Content-Type"] === "text/html");
 
-            response.setHeader('ETag', etag);
+            rnrObject.headers.ETag = rnrObject.etag;
 
             if (isHtml) {
-                fileString = data.toString("utf-8");
-                parts = fileString.match(matchPart);
+                rnrObject.data = rnrObject.data.toString("utf-8");
+                rnrObject.parts = rnrObject.data.match(matchPart);
 
-                if (parts) {
-                    util.getParts(fileString, parts, response, 0, headers);
+                if (rnrObject.parts) {
+                    util.getParts(rnrObject, 0);
                 } else {
-                    resp.gzip(data, response, headers);
+                    resp.gzip(rnrObject);
                 }
             } else {
-                resp.gzip(data, response, headers);
+                resp.gzip(rnrObject);
             }
         },
-        "404" : function (response, headers) {
-            response.writeHead(404, headers);
-            response.write("404 Not Found\n");
-            response.end();
+        "404" : function (rnrObject) {
+            rnrObject.data = "404 Not Found\n";
+            resp.gzip(rnrObject);
         },
-        "500" : function (response, error, headers) {
-            response.writeHead(500, headers);
-            response.write(error + "\n");
-            response.end();
+        "500" : function (rnrObject) {
+            resp.gzip(rnrObject);
         }
     };
 
     util = {
-        getPart : function (fileString, parts, response, i, headers) {
-            var partUrl = parts[i].match(/["'][\w\_\/\.]+["']/).join().replace(/['"]/g, ""),
+        getPart : function (rnrObject, i) {
+            var partUrl = rnrObject.parts[i].match(/["'][\w\_\/\.]+["']/).join().replace(/['"]/g, ""),
                 fullPath = path.join(process.cwd(), partUrl),
                 nextIndex = parseInt(i + 1, 10),
-                newFileString = fileString,
                 htmlPart;
 
             fs.readFile(fullPath, function (error, data) {
@@ -87,30 +96,31 @@
                     htmlPart = data.toString("utf-8");
 
                     if (!partFiles.watch[fullPath]) {
-                        partFiles.watch[fullPath] = true;
-
                         fs.watch(fullPath, function () {
                             partFiles.changed = true;
                         });
+                        partFiles.watch[fullPath] = true;
                     }
                 }
 
-                newFileString = fileString.replace(parts[i], htmlPart);
+                rnrObject.data = rnrObject.data.replace(rnrObject.parts[i], htmlPart);
 
-                util.getParts(newFileString, parts, response, nextIndex, headers);
+                util.getParts(rnrObject, nextIndex);
             });
         },
-        getParts : function (fileString, parts, response, i, headers) {
+        getParts : function (rnrObject, i) {
             var index = i || 0,
-                length = parts.length,
-                hasParts = fileString.match(matchPart);
+                length = rnrObject.parts.length,
+                hasParts = rnrObject.data.match(matchPart);
+
+            rnrObject.parts = hasParts;
 
             if (index < length) {
-                util.getPart(fileString, parts, response, index, headers);
+                util.getPart(rnrObject, index);
             } else if (index === length && hasParts) {
-                util.getPart(fileString, hasParts, response, 0, headers);
+                util.getPart(rnrObject, 0);
             } else {
-                resp.gzip(fileString, response, headers);
+                resp.gzip(rnrObject);
             }
         },
         getType : function (fullPath) {
@@ -149,39 +159,43 @@
 
             return headers;
         },
-        readFile : function (fullPath, response, headers, etag) {
-            fs.readFile(fullPath, function (error, data) {
+        readFile : function (rnrObject) {
+            fs.readFile(rnrObject.fullPath, function (error, data) {
                 if (error) {
-                    resp["500"](response, error, headers);
+                    rnrObject.data = error + "\n";
+                    rnrObject.statusCode = 500;
+                    resp["500"](rnrObject);
                 } else {
-                    resp["200"](response, data, headers, etag);
+                    rnrObject.data = data;
+                    rnrObject.statusCode = 200;
+                    resp["200"](rnrObject);
                 }
             });
         },
         createServer : function (request, response) {
-            var reqUrl = (request.url === "/") ? "/" + defaultfile : request.url,
-                pathName = url.parse(reqUrl).pathname,
-                fullPath = path.join(process.cwd(), pathName),
-                headers = util.getHeaders(fullPath);
+            var rnrObject = createRnRObject(request, response);
 
-            path.exists(fullPath, function (exists) {
+            path.exists(rnrObject.fullPath, function (exists) {
                 if (!exists) {
-                    resp["404"](response, headers);
+                    rnrObject.statusCode = 404;
+                    resp["404"](rnrObject);
                 } else {
                     fs.stat("." + request.url, function () {
                         var args = arguments,
                             stat = args[1],
                             etag = stat ? stat.size + "-" + Date.parse(stat.mtime) : "";
 
+                        rnrObject.etag = etag;
+
                         if (stat) {
-                            response.setHeader('Last-Modified', stat.mtime);
+                            rnrObject.headers["Last-Modified"] = stat.mtime;
                         }
 
                         if (!partFiles.changed && etag && request.headers['if-none-match'] === etag) {
                             response.statusCode = 304;
                             response.end();
                         } else {
-                            util.readFile(fullPath, response, headers, etag);
+                            util.readFile(rnrObject);
                         }
                     });
                 }
@@ -189,7 +203,7 @@
         }
     };
 
-    exports.server = http.createServer(util.createServer).listen(port, hostname);
+    exports.server = http.createServer(util.createServer).listen(webConfig.port, webConfig.hostname);
 
-    sys.puts("Server Running on " + hostname + ":" + port);
+    sys.puts("Server Running on " + webConfig.hostname + ":" + webConfig.port);
 }());
