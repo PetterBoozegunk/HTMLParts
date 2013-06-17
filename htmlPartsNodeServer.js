@@ -18,7 +18,7 @@
 
         util,
         resp,
-        partFiles,
+        cache,
         createRnRObject; // RnR = Request aNd Response
 
     createRnRObject = function (request, response) {
@@ -35,9 +35,49 @@
         return rnrObject;
     };
 
-    partFiles = {
-        changed : false,
-        watch : {}
+    cache = {
+        watchFile : function (fullPath) {
+            fs.watch(fullPath, function () {
+                cache[fullPath]["Last-Modified"] = new Date();
+            });
+        },
+        partsModified : function (fullPath) {
+            var partsWasModified = false,
+                inCache = cache[fullPath],
+                lastAccessed,
+                lastModified,
+                partInCache,
+                i,
+                l;
+
+            if (inCache && inCache.partsArray && inCache.partsArray.length) {
+                l = inCache.partsArray.length;
+
+                for (i = 0; i < l; i += 1) {
+                    partInCache = cache[inCache.partsArray[i]];
+
+                    lastAccessed = partInCache["Last-Accessed"];
+                    lastModified = partInCache["Last-Modified"];
+
+                    if (lastModified > lastAccessed) {
+                        partsWasModified = true;
+                        break;
+                    }
+                }
+            }
+
+            return partsWasModified;
+        },
+        add : function (fullPath, dataString) {
+            var now = new Date();
+
+            cache[fullPath] = {
+                data : dataString || "",
+                "Last-Modified" : now,
+                "Last-Accessed" : now
+            };
+            cache.watchFile(fullPath);
+        }
     };
 
     resp = {
@@ -51,7 +91,11 @@
                 rnrObject.headers["Content-Length"] = result.length;
                 rnrObject.response.writeHead(rnrObject.statusCode, rnrObject.headers);
 
-                partFiles.changed = false;
+                if (cache[rnrObject.fullPath]) {
+                    cache[rnrObject.fullPath].data = result;
+                    cache[rnrObject.fullPath]["Last-Accessed"] = new Date();
+                }
+
                 rnrObject.response.end(result);
             });
         },
@@ -83,42 +127,58 @@
     };
 
     util = {
-        getPart : function (rnrObject, i) {
-            var partUrl = rnrObject.parts[i].match(/["'][\w\_\/\.]+["']/).join().replace(/['"]/g, ""),
+        getPart : function (rnrObject) {
+            var  now = new Date(),
+                partUrl = rnrObject.parts[0].match(/["'][\w\_\/\.]+["']/).join().replace(/['"]/g, ""),
                 fullPath = path.join(process.cwd(), partUrl),
-                nextIndex = parseInt(i + 1, 10),
-                htmlPart;
+                newdata,
+                inCache = cache[fullPath],
+                htmlPart = inCache ? inCache.data : "",
+                lastAccessed = inCache ? inCache["Last-Accessed"] : 0,
+                lastModified = inCache ? inCache["Last-Modified"] : 0;
 
-            fs.readFile(fullPath, function (error, data) {
-                if (error) {
-                    htmlPart = "<div style=\"color: red; background: #ffe2e7; padding: 5px 10px; border: solid 1px red;\">The file \"" + fullPath + "\" does not exist</div>";
-                } else {
-                    htmlPart = data.toString("utf-8");
+            if (inCache && (lastModified < lastAccessed)) {
+                newdata = rnrObject.data.replace(rnrObject.parts[0], htmlPart);
+                rnrObject.data = newdata;
 
-                    if (!partFiles.watch[fullPath]) {
-                        fs.watch(fullPath, function () {
-                            partFiles.changed = true;
-                        });
-                        partFiles.watch[fullPath] = true;
+                inCache["Last-Accessed"] = now;
+
+                util.getParts(rnrObject);
+            } else {
+                fs.readFile(fullPath, function (error, data) {
+                    if (error) {
+                        htmlPart = "<div style=\"color: red; background: #ffe2e7; padding: 5px 10px; border: solid 1px red;\">The file \"" + fullPath + "\" does not exist</div>";
+                    } else {
+                        htmlPart = data.toString("utf-8");
+
+                        if (!inCache) {
+                            cache.add(fullPath, htmlPart);
+
+                            if (!cache[rnrObject.fullPath].partsArray) {
+                                cache[rnrObject.fullPath].partsArray = [];
+                            }
+                            cache[rnrObject.fullPath].partsArray.push(fullPath);
+                        } else {
+                            cache[fullPath].data = htmlPart;
+                            inCache["Last-Accessed"] = now;
+                            inCache["Last-Modified"] = now;
+                        }
                     }
-                }
 
-                rnrObject.data = rnrObject.data.replace(rnrObject.parts[i], htmlPart);
+                    newdata = rnrObject.data.replace(rnrObject.parts[0], htmlPart);
+                    rnrObject.data = newdata;
 
-                util.getParts(rnrObject, nextIndex);
-            });
+                    util.getParts(rnrObject);
+                });
+            }
         },
-        getParts : function (rnrObject, i) {
-            var index = i || 0,
-                length = rnrObject.parts.length,
-                hasParts = rnrObject.data.match(matchPart);
+        getParts : function (rnrObject) {
+            var hasParts = rnrObject.data.match(matchPart);
 
             rnrObject.parts = hasParts;
 
-            if (index < length) {
-                util.getPart(rnrObject, index);
-            } else if (index === length && hasParts) {
-                util.getPart(rnrObject, 0);
+            if (hasParts) {
+                util.getPart(rnrObject);
             } else {
                 resp.gzip(rnrObject);
             }
@@ -173,33 +233,40 @@
             });
         },
         createServer : function (request, response) {
-            var rnrObject = createRnRObject(request, response);
+            var rnrObject = createRnRObject(request, response),
+                inCache = cache[rnrObject.fullPath],
+                etag = inCache ? cache[rnrObject.fullPath].etag : "",
+                lastAccessed = inCache ? inCache["Last-Accessed"] : 0,
+                lastModified = inCache ? inCache["Last-Modified"] : 0,
+                partsModified = cache.partsModified(rnrObject.fullPath);
 
-            path.exists(rnrObject.fullPath, function (exists) {
-                if (!exists) {
-                    rnrObject.statusCode = 404;
-                    resp["404"](rnrObject);
-                } else {
-                    fs.stat("." + request.url, function () {
-                        var args = arguments,
-                            stat = args[1],
+            if (inCache && (lastAccessed > lastModified) && !partsModified && etag && request.headers['if-none-match'] === etag) {
+                response.statusCode = 304;
+                response.end();
+            } else {
+                path.exists(rnrObject.fullPath, function (exists) {
+                    if (!exists) {
+                        rnrObject.statusCode = 404;
+                        resp["404"](rnrObject);
+                    } else {
+                        fs.stat("." + request.url, function () {
+                            var args = arguments,
+                                stat = args[1];
+
                             etag = stat ? stat.size + "-" + Date.parse(stat.mtime) : "";
 
-                        rnrObject.etag = etag;
+                            rnrObject.etag = etag;
 
-                        if (stat) {
-                            rnrObject.headers["Last-Modified"] = stat.mtime;
-                        }
+                            if (!cache[rnrObject.fullPath]) {
+                                cache.add(rnrObject.fullPath);
+                            }
+                            cache[rnrObject.fullPath].etag = etag;
 
-                        if (!partFiles.changed && etag && request.headers['if-none-match'] === etag) {
-                            response.statusCode = 304;
-                            response.end();
-                        } else {
                             util.readFile(rnrObject);
-                        }
-                    });
-                }
-            });
+                        });
+                    }
+                });
+            }
         }
     };
 
