@@ -50,16 +50,16 @@
                 i,
                 l;
 
-            if (inCache && inCache.partsArray && inCache.partsArray.length) {
-                l = inCache.partsArray.length;
+            if (inCache && inCache.partsArray) {
+                l = inCache.partsArray.length || 0;
 
                 for (i = 0; i < l; i += 1) {
                     partInCache = cache[inCache.partsArray[i]];
 
-                    lastAccessed = partInCache["Last-Accessed"];
+                    lastAccessed = inCache["Last-Accessed"];
                     lastModified = partInCache["Last-Modified"];
 
-                    if (lastModified > lastAccessed) {
+                    if ((lastModified && lastAccessed) && lastModified > lastAccessed) {
                         partsWasModified = true;
                         break;
                     }
@@ -67,6 +67,18 @@
             }
 
             return partsWasModified;
+        },
+        addToPartArray : function (urlFullPath, partFullPath) {
+            var inCache = cache[urlFullPath],
+                partsArray = inCache.partsArray || [util.trim(partFullPath)],
+                partsRe = new RegExp("(^|,)" + util.trim(partFullPath.replace(/(\\)/g, "$1$1")) + "(,|$)"),
+                partInArray = partsArray.join().match(partsRe);
+            
+            if (!inCache.partsArray) {
+                inCache.partsArray = partsArray;
+            } else if (!partInArray) {
+                inCache.partsArray.push(util.trim(partFullPath));
+            }
         },
         add : function (fullPath, dataString) {
             var now = new Date();
@@ -127,6 +139,9 @@
     };
 
     util = {
+        trim : function (str) {
+            return str.toString().replace(/(^\s+|\s+$)/g, "");
+        },
         getPart : function (rnrObject) {
             var  now = new Date(),
                 partUrl = rnrObject.parts[0].match(/["'][\w\_\/\.]+["']/).join().replace(/['"]/g, ""),
@@ -153,16 +168,13 @@
 
                         if (!inCache) {
                             cache.add(fullPath, htmlPart);
-
-                            if (!cache[rnrObject.fullPath].partsArray) {
-                                cache[rnrObject.fullPath].partsArray = [];
-                            }
-                            cache[rnrObject.fullPath].partsArray.push(fullPath);
                         } else {
                             cache[fullPath].data = htmlPart;
                             inCache["Last-Accessed"] = now;
                             inCache["Last-Modified"] = now;
                         }
+
+                        cache.addToPartArray(rnrObject.fullPath, fullPath);
                     }
 
                     newdata = rnrObject.data.replace(rnrObject.parts[0], htmlPart);
