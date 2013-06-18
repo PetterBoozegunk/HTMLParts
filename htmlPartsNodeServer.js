@@ -171,8 +171,10 @@
                             stat = args[1],
                             etag = stat ? stat.size + "-" + Date.parse(stat.mtime) : "";
 
-                        rnrObject.headers['Last-Modified'] = stat.mtime;
-                        rnrObject.etag = etag;
+                        if (etag) {
+                            rnrObject.headers['Last-Modified'] = stat.mtime;
+                            rnrObject.etag = etag;
+                        }
 
                         if (request.headers['if-none-match'] === etag) {
                             response.statusCode = 304;
