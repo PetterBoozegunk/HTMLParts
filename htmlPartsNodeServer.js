@@ -18,7 +18,6 @@
 
         util,
         resp,
-        cache,
         createRnRObject; // RnR = Request aNd Response
 
     createRnRObject = function (request, response) {
@@ -35,63 +34,6 @@
         return rnrObject;
     };
 
-    cache = {
-        watchFile : function (fullPath) {
-            fs.watch(fullPath, function () {
-                cache[fullPath]["Last-Modified"] = new Date();
-            });
-        },
-        partsModified : function (fullPath) {
-            var partsWasModified = false,
-                inCache = cache[fullPath],
-                lastAccessed,
-                lastModified,
-                partInCache,
-                i,
-                l;
-
-            if (inCache && inCache.partsArray) {
-                l = inCache.partsArray.length || 0;
-
-                for (i = 0; i < l; i += 1) {
-                    partInCache = cache[inCache.partsArray[i]];
-
-                    lastAccessed = inCache["Last-Accessed"];
-                    lastModified = partInCache["Last-Modified"];
-
-                    if ((lastModified && lastAccessed) && lastModified > lastAccessed) {
-                        partsWasModified = true;
-                        break;
-                    }
-                }
-            }
-
-            return partsWasModified;
-        },
-        addToPartArray : function (urlFullPath, partFullPath) {
-            var inCache = cache[urlFullPath],
-                partsArray = inCache.partsArray || [util.trim(partFullPath)],
-                partsRe = new RegExp("(^|,)" + util.trim(partFullPath.replace(/(\\)/g, "$1$1")) + "(,|$)"),
-                partInArray = partsArray.join().match(partsRe);
-            
-            if (!inCache.partsArray) {
-                inCache.partsArray = partsArray;
-            } else if (!partInArray) {
-                inCache.partsArray.push(util.trim(partFullPath));
-            }
-        },
-        add : function (fullPath, dataString) {
-            var now = new Date();
-
-            cache[fullPath] = {
-                data : dataString || "",
-                "Last-Modified" : now,
-                "Last-Accessed" : now
-            };
-            cache.watchFile(fullPath);
-        }
-    };
-
     resp = {
         gzip : function (rnrObject) {
             var buffe = new Buffer(rnrObject.data, "utf-8");
@@ -102,11 +44,6 @@
 
                 rnrObject.headers["Content-Length"] = result.length;
                 rnrObject.response.writeHead(rnrObject.statusCode, rnrObject.headers);
-
-                if (cache[rnrObject.fullPath]) {
-                    cache[rnrObject.fullPath].data = result;
-                    cache[rnrObject.fullPath]["Last-Accessed"] = new Date();
-                }
 
                 rnrObject.response.end(result);
             });
@@ -143,46 +80,23 @@
             return str.toString().replace(/(^\s+|\s+$)/g, "");
         },
         getPart : function (rnrObject) {
-            var  now = new Date(),
-                partUrl = rnrObject.parts[0].match(/["'][\w\_\/\.]+["']/).join().replace(/['"]/g, ""),
+            var partUrl = rnrObject.parts[0].match(/["'][\w\_\/\.]+["']/).join().replace(/['"]/g, ""),
                 fullPath = path.join(process.cwd(), partUrl),
                 newdata,
-                inCache = cache[fullPath],
-                htmlPart = inCache ? inCache.data : "",
-                lastAccessed = inCache ? inCache["Last-Accessed"] : 0,
-                lastModified = inCache ? inCache["Last-Modified"] : 0;
+                htmlPart;
 
-            if (inCache && (lastModified < lastAccessed)) {
+            fs.readFile(fullPath, function (error, data) {
+                if (error) {
+                    htmlPart = "<div style=\"color: red; background: #ffe2e7; padding: 5px 10px; border: solid 1px red;\">The file \"" + fullPath + "\" does not exist</div>";
+                } else {
+                    htmlPart = data.toString("utf-8");
+                }
+
                 newdata = rnrObject.data.replace(rnrObject.parts[0], htmlPart);
                 rnrObject.data = newdata;
 
-                inCache["Last-Accessed"] = now;
-
                 util.getParts(rnrObject);
-            } else {
-                fs.readFile(fullPath, function (error, data) {
-                    if (error) {
-                        htmlPart = "<div style=\"color: red; background: #ffe2e7; padding: 5px 10px; border: solid 1px red;\">The file \"" + fullPath + "\" does not exist</div>";
-                    } else {
-                        htmlPart = data.toString("utf-8");
-
-                        if (!inCache) {
-                            cache.add(fullPath, htmlPart);
-                        } else {
-                            cache[fullPath].data = htmlPart;
-                            inCache["Last-Accessed"] = now;
-                            inCache["Last-Modified"] = now;
-                        }
-
-                        cache.addToPartArray(rnrObject.fullPath, fullPath);
-                    }
-
-                    newdata = rnrObject.data.replace(rnrObject.parts[0], htmlPart);
-                    rnrObject.data = newdata;
-
-                    util.getParts(rnrObject);
-                });
-            }
+            });
         },
         getParts : function (rnrObject) {
             var hasParts = rnrObject.data.match(matchPart);
@@ -245,44 +159,34 @@
             });
         },
         createServer : function (request, response) {
-            var rnrObject = createRnRObject(request, response),
-                inCache = cache[rnrObject.fullPath],
-                etag = inCache ? cache[rnrObject.fullPath].etag : "",
-                lastAccessed = inCache ? inCache["Last-Accessed"] : 0,
-                lastModified = inCache ? inCache["Last-Modified"] : 0,
-                partsModified = cache.partsModified(rnrObject.fullPath);
+            var rnrObject = createRnRObject(request, response);
 
-            if (inCache && (lastAccessed > lastModified) && !partsModified && etag && request.headers['if-none-match'] === etag) {
-                response.statusCode = 304;
-                response.end();
-            } else {
-                path.exists(rnrObject.fullPath, function (exists) {
-                    if (!exists) {
-                        rnrObject.statusCode = 404;
-                        resp["404"](rnrObject);
-                    } else {
-                        fs.stat("." + request.url, function () {
-                            var args = arguments,
-                                stat = args[1];
-
+            path.exists(rnrObject.fullPath, function (exists) {
+                if (!exists) {
+                    rnrObject.statusCode = 404;
+                    resp["404"](rnrObject);
+                } else {
+                    fs.stat("." + request.url, function () {
+                        var args = arguments,
+                            stat = args[1],
                             etag = stat ? stat.size + "-" + Date.parse(stat.mtime) : "";
 
-                            rnrObject.etag = etag;
+                        rnrObject.headers['Last-Modified'] = stat.mtime;
+                        rnrObject.etag = etag;
 
-                            if (!cache[rnrObject.fullPath]) {
-                                cache.add(rnrObject.fullPath);
-                            }
-                            cache[rnrObject.fullPath].etag = etag;
-
+                        if (request.headers['if-none-match'] === etag) {
+                            response.statusCode = 304;
+                            response.end();
+                        } else {
                             util.readFile(rnrObject);
-                        });
-                    }
-                });
-            }
+                        }
+                    });
+                }
+            });
         }
     };
 
-    exports.server = http.createServer(util.createServer).listen(webConfig.port, webConfig.hostname);
+    http.createServer(util.createServer).listen(webConfig.port, webConfig.hostname);
 
-    sys.puts("Server Running on " + webConfig.hostname + ":" + webConfig.port);
+    sys.puts("Server Running on http://" + webConfig.hostname + ":" + webConfig.port);
 }());
