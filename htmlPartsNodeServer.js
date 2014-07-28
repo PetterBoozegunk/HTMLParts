@@ -115,7 +115,8 @@
 
                 isHtml = /\.htm[l]?$/i.test(tlc),
                 isCss = /\.css$/i.test(tlc),
-                isSvg = /\.svg/i.test(tlc);
+                isSvg = /\.svg/i.test(tlc),
+                isJs = /\.js$/i.test(tlc);
 
             if (isHtml) {
                 type = "text/html";
@@ -123,6 +124,8 @@
                 type = "text/css";
             } else if (isSvg) {
                 type = "image/svg+xml";
+            } else if (isJs) {
+                type = "text/javascript";
             }
 
             return type;
