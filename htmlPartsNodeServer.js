@@ -125,7 +125,7 @@
             } else if (isSvg) {
                 type = "image/svg+xml";
             } else if (isJs) {
-                type = "text/javascript";
+                type = "application/javascript";
             }
 
             return type;
