@@ -6,7 +6,7 @@
     <link type="text/css" rel="stylesheet" href="/test/test304.css" />
 </head>
 <body>
-    <%= part("/parts/part.htm") %>
-    <%= part("/parts/menu.htm") %>
+    <!-- include("/parts/part.shtml") -->
+    <!-- include("/parts/menu.shtml") -->
 </body>
 </html>

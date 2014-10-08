@@ -3,6 +3,6 @@
         <a href="/">Start page</a>
     </li>
     <li>
-        <a href="/test/test.htm">Test page</a>
+        <a href="/test/test.shtml">Test page</a>
     </li>
 </ul>
