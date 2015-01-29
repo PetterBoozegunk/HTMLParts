@@ -3,7 +3,7 @@
 (function () {
     "use strict";
 
-    var webConfig = require("./web.config.json"),
+    var settings = require("./server.settings.json"),
         zlib = require("zlib"),
         sys = require("sys"),
         http = require("http"),
@@ -53,7 +53,7 @@
 
             this.request = request;
             this.response = response;
-            this.reqUrl = (that.request.url === "/") ? "/" + webConfig.defaultfile : that.request.url;
+            this.reqUrl = (that.request.url === "/") ? "/" + settings.defaultfile : that.request.url;
             this.pathName = url.parse(that.reqUrl).pathname;
             this.fullPath = path.join(process.cwd(), that.pathName);
             this.headers = server.getHeaders(that.fullPath);
@@ -190,7 +190,7 @@
         }
     };
 
-    http.createServer(server.create).listen(webConfig.port, webConfig.hostname);
+    http.createServer(server.create).listen(settings.port, settings.hostname);
 
-    sys.puts("Server Running on http://" + webConfig.hostname + ":" + webConfig.port);
+    sys.puts("Server Running on http://" + settings.hostname + ":" + settings.port);
 }());
