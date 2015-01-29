@@ -3,11 +3,7 @@
 (function () {
     "use strict";
 
-    var webConfig = {
-        hostname: "localhost",
-        port: 8080,
-        defaultfile: "index.html"
-    },
+    var webConfig = require("./web.config.json"),
         zlib = require("zlib"),
         sys = require("sys"),
         http = require("http"),
@@ -114,7 +110,6 @@
 
                 that.newdata = that.data.replace(that.includes[0], that.currentInclude);
                 that.data = that.newdata;
-
                 server.getIncludes(that);
             };
 
@@ -140,7 +135,6 @@
                 fullPath = path.join(process.cwd(), includeUrl);
 
             rnrObject.fullPath = fullPath;
-
             fs.readFile(fullPath, rnrObject.readFileInclude);
         },
         getIncludes: function (rnrObject) {
