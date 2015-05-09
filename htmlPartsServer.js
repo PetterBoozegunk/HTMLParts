@@ -68,61 +68,6 @@
             this.fullPath = path.join(process.cwd(), that.pathName);
             this.headers = server.getHeaders(that.fullPath);
 
-            this.statCallback = function () {
-                var args = arguments,
-                    stat = args[1],
-                    etag = stat ? stat.size + "-" + Date.parse(stat.mtime) : "";
-
-                if (etag) {
-                    that.headers["Last-Modified"] = stat.mtime;
-                    that.etag = etag;
-                }
-
-                if (request.headers["if-none-match"] === etag) {
-                    response.statusCode = 304;
-                    response.end();
-                } else {
-                    that.readFile(that);
-                }
-            };
-
-            this.exists = function (exists) {
-                if (!exists) {
-                    that.statusCode = 404;
-                    resp["404"](that);
-                } else {
-                    fs.stat("." + request.url, that.statCallback);
-                }
-            };
-
-            this.readFile = function (rnrObject) {
-                fs.readFile(rnrObject.fullPath, rnrObject.readFileCallback);
-            };
-
-            this.readFileCallback = function (error, data) {
-                if (error) {
-                    that.data = error + "\n";
-                    that.statusCode = 500;
-                    resp["500"](that);
-                } else {
-                    that.data = data;
-                    that.statusCode = 200;
-                    resp["200"](that);
-                }
-            };
-
-            this.readFileInclude = function (error, data) {
-                if (error) {
-                    that.currentInclude = "<div style=\"color: red; background: #ffe2e7; padding: 5px 10px; border: solid 1px red;\">The file \"" + that.fullPath + "\" does not exist</div>";
-                } else {
-                    that.currentInclude = data.toString("utf-8");
-                }
-
-                that.newdata = that.data.replace(that.includes[0], that.currentInclude);
-                that.data = that.newdata;
-                server.getIncludes(that);
-            };
-
             this.gzip = function () {
                 var args = arguments,
                     result = args[1];
@@ -131,29 +76,70 @@
                 that.response.writeHead(that.statusCode, that.headers);
                 that.response.end(result);
             };
+        },
+        createRnRObject = function (request, response) {// RnR = Request aNd Response
+            return new RnRObject(request, response);
+        };
 
-            this.methodCallback = function (method, args) {
-                var callback = (args.length && typeof args[args.length - 1] === "function") ? args[args.length - 1] : null,
-                    newArgs = [];
+    RnRObject.prototype = {
+        statCallback : function () {
+            var rnrObject = this,
+                args = arguments,
+                stat = args[1],
+                etag = stat ? stat.size + "-" + Date.parse(stat.mtime) : "";
 
-                args.forEach(function (item, i) {
-                    if (i < (args.length - 1) || (i === (args.length - 1) && typeof item !== "function")) {
-                        newArgs.push(item);
-                    }
-                });
-
-                if (callback) {
-                    newArgs.push(function () {
-                        callback.apply(that, arguments);
-                    });
-                }
-
-                method.apply(that, newArgs);
+            if (etag) {
+                rnrObject.headers["Last-Modified"] = stat.mtime;
+                rnrObject.etag = etag;
             }
 
-            this.contextCallback = function (context, func, argsArray) {
-                var callback = argsArray[argsArray.length - 1];
+            if (rnrObject.request.headers["if-none-match"] === etag) {
+                rnrObject.response.statusCode = 304;
+                rnrObject.response.end();
+            } else {
+                rnrObject.contextCallback(rnrObject, fs.readFile, [rnrObject.fullPath, rnrObject.readFileCallback]);
+            }
+        },
+        exists : function (exists) {
+            var rnrObject = this;
 
+            if (!exists) {
+                rnrObject.statusCode = 404;
+                resp["404"](rnrObject);
+            } else {
+                rnrObject.contextCallback(rnrObject, fs.stat, ["." + rnrObject.request.url, rnrObject.statCallback]);
+            }
+        },
+        readFileCallback : function (error, data) {
+            var rnrObject = this;
+
+            if (error) {
+                rnrObject.data = error + "\n";
+                rnrObject.statusCode = 500;
+                resp["500"](rnrObject);
+            } else {
+                rnrObject.data = data;
+                rnrObject.statusCode = 200;
+                resp["200"](rnrObject);
+            }
+        },
+        readFileInclude : function (error, data) {
+            var rnrObject = this;
+
+            if (error) {
+                rnrObject.currentInclude = "<div style=\"color: red; background: #ffe2e7; padding: 5px 10px; border: solid 1px red;\">The file \"" + rnrObject.fullPath + "\" does not exist</div>";
+            } else {
+                rnrObject.currentInclude = data.toString("utf-8");
+            }
+
+            rnrObject.newdata = rnrObject.data.replace(rnrObject.includes[0], rnrObject.currentInclude);
+            rnrObject.data = rnrObject.newdata;
+            server.getIncludes(rnrObject);
+        },
+        contextCallback : function (context, func, argsArray) {
+            var callback = (argsArray instanceof Array && argsArray.length) ? argsArray[argsArray.length - 1] : null;
+
+            if (typeof callback === "function") {
                 argsArray.pop();
 
                 argsArray.push(function () {
@@ -161,13 +147,11 @@
 
                     callback.apply(context, args);
                 });
-
-                func.apply(context, argsArray);
             }
-        },
-        createRnRObject = function (request, response) {// RnR = Request aNd Response
-            return new RnRObject(request, response);
-        };
+
+            func.apply(context, argsArray);
+        }
+    };
 
     server = {
         trim: function (str) {
@@ -202,7 +186,7 @@
                 fullPath = path.join(process.cwd(), includeUrl);
 
             rnrObject.fullPath = fullPath;
-            fs.readFile(fullPath, rnrObject.readFileInclude);
+            rnrObject.contextCallback(rnrObject, fs.readFile, [fullPath, rnrObject.readFileInclude]);
         },
         getIncludes: function (rnrObject) {
             var hasIncludes = rnrObject.data.match(matchIncludes);
@@ -245,7 +229,7 @@
         create: function (request, response) {
             var rnrObject = createRnRObject(request, response);
 
-            rnrObject.methodCallback(fs.exists, [rnrObject.fullPath, rnrObject.exists]);
+            rnrObject.contextCallback(rnrObject, fs.exists, [rnrObject.fullPath, rnrObject.exists]);
         }
     };
 
