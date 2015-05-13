@@ -22,29 +22,31 @@
             gzip: function (rnrObject) {
                 var buffe = new Buffer(rnrObject.data, "utf-8");
 
-                zlib.gzip(buffe, rnrObject.gzip);
-            },
-            "200": function (rnrObject) {
-                var isPHtml = (rnrObject.headers["isPHtml"]);
-
                 rnrObject.headers.ETag = rnrObject.etag;
 
-                delete rnrObject.headers["isPHtml"];
+                rnrObject.contextCallback(rnrObject, zlib.gzip, [buffe, rnrObject.gzip]);
+            },
+            handlePHtml: function (rnrObject) {
+                rnrObject.data = rnrObject.data.toString("utf-8");
+
+                rnrObject.layout = rnrObject.data.match(matchLayout);
+                rnrObject.includes = rnrObject.data.match(matchIncludes);
+
+                if (rnrObject.layout) {
+                    rnrObject.layout = rnrObject.layout.join();
+
+                    server.getLayout(rnrObject);
+                } else if (rnrObject.includes) {
+                    server.getIncludes(rnrObject, 0);
+                } else {
+                    resp.gzip(rnrObject);
+                }
+            },
+            "200": function (rnrObject) {
+                var isPHtml = /\.phtml$/.test(rnrObject.fullPath);
 
                 if (isPHtml) {
-                    rnrObject.data = rnrObject.data.toString("utf-8");
-                    rnrObject.layout = rnrObject.data.match(matchLayout);
-                    rnrObject.includes = rnrObject.data.match(matchIncludes);
-
-                    if (rnrObject.layout) {
-                        rnrObject.layout = rnrObject.layout.join();
-
-                        server.getLayout(rnrObject);
-                    } else if (rnrObject.includes) {
-                        server.getIncludes(rnrObject, 0);
-                    } else {
-                        resp.gzip(rnrObject);
-                    }
+                    resp.handlePHtml(rnrObject);
                 } else {
                     resp.gzip(rnrObject);
                 }
@@ -67,21 +69,21 @@
             this.pathName = url.parse(that.reqUrl).pathname;
             this.fullPath = path.join(process.cwd(), that.pathName);
             this.headers = server.getHeaders(that.fullPath);
-
-            this.gzip = function () {
-                var args = arguments,
-                    result = args[1];
-
-                that.headers["Content-Length"] = result.length;
-                that.response.writeHead(that.statusCode, that.headers);
-                that.response.end(result);
-            };
         },
         createRnRObject = function (request, response) {// RnR = Request aNd Response
             return new RnRObject(request, response);
         };
 
     RnRObject.prototype = {
+        gzip : function () {
+            var rnrObject = this,
+                args = arguments,
+                result = args[1];
+
+            rnrObject.headers["Content-Length"] = result.length;
+            rnrObject.response.writeHead(rnrObject.statusCode, rnrObject.headers);
+            rnrObject.response.end(result);
+        },
         statCallback : function () {
             var rnrObject = this,
                 args = arguments,
@@ -220,8 +222,7 @@
                     "Content-Encoding": "gzip",
                     "Cache-Control": "public, max-age=345600", // 4 days
                     "Date": now.toUTCString(),
-                    "Expires": new Date(parseInt(year + 1, 10), month, date).toUTCString(),
-                    "isPHtml" : (/\.phtml$/ig).test(fullPath)
+                    "Expires": new Date(parseInt(year + 1, 10), month, date).toUTCString()
                 };
 
             return headers;
