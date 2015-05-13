@@ -3,7 +3,8 @@
 (function () {
     "use strict";
 
-    var settings = require("./server.settings.json"),
+    var settings = require("./server/settings.json"),
+        mimetypes = require("./server/mimetypes.json"),
 
         zlib = require("zlib"),
         http = require("http"),
@@ -13,8 +14,6 @@
 
         matchLayout = /(<!--([\s]+)?layout\(['"]?[\w\_\.\/]+['"]?\)([\s]+)?-->)/g,
         matchIncludes = /(<!--([\s]+)?include\(['"]?[\w\_\.\/]+['"]?\)([\s]+)?-->)/g,
-
-        mimetypes = require("./mimetypes.json"),
 
         // ReSharper disable once JoinDeclarationAndInitializerJs (This cannot be done here... But anyone is welcome to try.)
         server,
@@ -52,10 +51,15 @@
                 }
             },
             "404": function (rnrObject) {
-                rnrObject.data = "404 Not Found\n";
+                rnrObject.data = "404 - file not found";
+
+                rnrObject.statusCode = 404;
                 resp.gzip(rnrObject);
             },
-            "500": function (rnrObject) {
+            "500": function (rnrObject, error) {
+                rnrObject.data = (error || "Server error") + "\n";
+
+                rnrObject.statusCode = 500;
                 resp.gzip(rnrObject);
             }
         },
@@ -106,7 +110,6 @@
             var rnrObject = this;
 
             if (!exists) {
-                rnrObject.statusCode = 404;
                 resp["404"](rnrObject);
             } else {
                 rnrObject.contextCallback(rnrObject, fs.stat, ["." + rnrObject.request.url, rnrObject.statCallback]);
@@ -116,9 +119,7 @@
             var rnrObject = this;
 
             if (error) {
-                rnrObject.data = error + "\n";
-                rnrObject.statusCode = 500;
-                resp["500"](rnrObject);
+                resp["500"](rnrObject, error);
             } else {
                 rnrObject.data = data;
                 rnrObject.statusCode = 200;
@@ -159,22 +160,22 @@
         trim: function (str) {
             return str.toString().replace(/(^\s+|\s+$)/g, "");
         },
+        setupLayout: function (rnrObject, data) {
+            var layoutData = data.toString("utf-8"),
+                fileContent = server.trim(rnrObject.data.replace(matchLayout, "")),
+                newData = layoutData.replace(/<\!--\s\[phtml\:content\]\s-->/, fileContent);
+
+            rnrObject.data = server.trim(newData);
+
+            server.getIncludes(rnrObject);
+        },
         setLayout: function (error, data) {
-            var rnrObject = this,
-                newData,
-                fileContent;
+            var rnrObject = this;
 
             if (error) {
-                rnrObject.data = error + "\n";
-                rnrObject.statusCode = 500;
-                resp["500"](rnrObject);
+                resp["500"](rnrObject, error);
             } else {
-                rnrObject.layoutData = data.toString("utf-8");
-                fileContent = server.trim(rnrObject.data.replace(matchLayout, ""));
-                newData = rnrObject.layoutData.replace(/<\!--\s\[htmlparts\:content\]\s-->/, fileContent);
-                rnrObject.data = server.trim(newData);
-
-                server.getIncludes(rnrObject);
+                server.setupLayout(rnrObject, data);
             }
         },
         getLayout: function (rnrObject) {
@@ -213,10 +214,12 @@
         },
         getHeaders: function (fullPath) {
             var type = server.getType(fullPath),
+
                 now = new Date(),
                 year = now.getFullYear(),
                 month = now.getMonth(),
                 date = now.getDate(),
+
                 headers = {
                     "Content-Type": type,
                     "Content-Encoding": "gzip",
