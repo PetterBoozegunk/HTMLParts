@@ -15,6 +15,7 @@
     ".ogx": "application/ogg",
     ".pdf": "application/pdf",
 
+    ".mp3" : "audio/mpeg3",
     ".mp4a": "audio/mp4",
     ".mpga": "audio/mpeg",
     ".oga": "audio/ogg",
@@ -40,6 +41,7 @@
     ".f4v": "video/x-f4v",
     ".jpgv": "video/jpeg",
     ".mpeg": "video/mpeg",
+    ".mpg": "video/mpeg",
     ".ogv": "video/ogg",
     ".qt": "video/quicktime",
     ".webm": "video/webm",
