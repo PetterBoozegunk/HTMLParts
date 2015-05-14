@@ -683,5 +683,6 @@
     ".par": ["text/plain-bas"],
     ".yaml": ["text/yaml"],
 
+    ".phtml": ["text/html"],
     ".map" :  ["application/octet-stream"]
 }
