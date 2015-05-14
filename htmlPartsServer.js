@@ -206,8 +206,8 @@
                 tlc = fullPath.toLowerCase(),
                 file = tlc.match(/\.[a-z\d]+$/);
 
-            if (mimetypes[file] && mimetypes[file].length) {
-                type = mimetypes[file][0];
+            if (mimetypes[file]) {
+                type = mimetypes[file];
             }
 
             return type;
