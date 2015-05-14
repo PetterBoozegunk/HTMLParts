@@ -25,3 +25,10 @@ body {
 body {
     background: #efefef;
 }
+
+.mimetypes > h2 + p,
+.mimetypes > h2 + div {
+    margin-bottom: 10px;
+    padding-bottom: 10px;
+    border-bottom: 5px double #666;
+}

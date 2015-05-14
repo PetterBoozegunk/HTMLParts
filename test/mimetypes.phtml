@@ -1,38 +1,44 @@
-﻿<!-- layout("/parts/layout.phtml") --> 
+﻿<!-- layout("/parts/layout.phtml") -->
 
-<h1>Mimetypes test</h1>
+<div class="mimetypes">
+  <h1>Mimetypes test</h1>
 
-<p>
-	<img src="/ui/media/gif.gif" alt="" />
-  <img src="/ui/media/jpg.jpg" alt="" />
-  <img src="/ui/media/png-24.png" alt="" />
-  <img src="/ui/media/png-8.png" alt="" />
-
-  <img src="/ui/media/svg.svg" alt="" />
-</p>
-<p>
-  <span class="font-test">Font test</span>
-</p>
-
-<p>
-  <video controls="controls" poster="/ui/media/video/big-buck-bunny_poster.jpg" width="640" height="360">
-    <source src="/ui/media/video/big_buck_bunny.mp4" type="video/mp4" />
-    <source src="/ui/media/video/big_buck_bunny.webm" type="video/webm" />
-    <source src="/ui/media/video/big_buck_bunny.ogv" type="video/ogg" />
-
-    <object width="640" height="360" data="/ui/media/video/player.swf" type="application/x-shockwave-flash">
-      <!-- Firefox uses the `data` attribute above, IE/Safari uses the param below -->
-      <param value="/ui/media/video/player.swf" name="movie" />
-      <param value="autostart=true&amp;controlbar=over&amp;image=/ui/media/video/big-buck-bunny_poster.jpg&amp;file=/ui/media/video/big_buck_bunny.mp4" name="flashvars" />
-      <!-- fallback image -->
-      <img width="640" height="360" title="No video playback capabilities, please download the video below" alt="Big Buck Bunny" src="/ui/media/video/big-buck-bunny_poster.jpg" />
-	  </object>
-    
-  </video>
+  <h2>Image tests</h2>
   <p>
-    <strong>Download video:</strong> 
-    <a href="/ui/media/video/big_buck_bunny.mp4">MP4 format</a> | 
-    <a href="/ui/media/video/big_buck_bunny.ogv">Ogg format</a> | 
-    <a href="/ui/media/video/big_buck_bunny.webm">WebM format</a>
+	  <img src="/ui/media/gif.gif" alt="" />
+    <img src="/ui/media/jpg.jpg" alt="" />
+    <img src="/ui/media/png-24.png" alt="" />
+    <img src="/ui/media/png-8.png" alt="" />
+
+    <img src="/ui/media/svg.svg" alt="" />
   </p>
-</p>
+
+  <h2>Font test</h2>
+  <p>
+    <span class="font-test">Font test</span>
+  </p>
+
+  <h2>Video test</h2>
+  <div>
+    <video controls="controls" poster="/ui/media/video/big-buck-bunny_poster.jpg" width="640" height="360">
+      <source src="/ui/media/video/big_buck_bunny.mp4" type="video/mp4" />
+      <source src="/ui/media/video/big_buck_bunny.webm" type="video/webm" />
+      <source src="/ui/media/video/big_buck_bunny.ogv" type="video/ogg" />
+
+      <object width="640" height="360" data="/ui/media/video/player.swf" type="application/x-shockwave-flash">
+        <!-- Firefox uses the `data` attribute above, IE/Safari uses the param below -->
+        <param value="/ui/media/video/player.swf" name="movie" />
+        <param value="autostart=true&amp;controlbar=over&amp;image=/ui/media/video/big-buck-bunny_poster.jpg&amp;file=/ui/media/video/big_buck_bunny.mp4" name="flashvars" />
+        <!-- fallback image -->
+        <img width="640" height="360" title="No video playback capabilities, please download the video below" alt="Big Buck Bunny" src="/ui/media/video/big-buck-bunny_poster.jpg" />
+	    </object>
+    
+    </video>
+    <p>
+      <strong>Download video:</strong> 
+      <a href="/ui/media/video/big_buck_bunny.mp4">MP4 format</a> | 
+      <a href="/ui/media/video/big_buck_bunny.ogv">Ogg format</a> | 
+      <a href="/ui/media/video/big_buck_bunny.webm">WebM format</a>
+    </p>
+  </div>
+</div>
