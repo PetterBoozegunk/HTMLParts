@@ -13,3 +13,26 @@
 <p>
   <span class="font-test">Font test</span>
 </p>
+
+<p>
+  <video controls="controls" poster="/ui/media/video/big-buck-bunny_poster.jpg" width="640" height="360">
+    <source src="/ui/media/video/big_buck_bunny.mp4" type="video/mp4" />
+    <source src="/ui/media/video/big_buck_bunny.webm" type="video/webm" />
+    <source src="/ui/media/video/big_buck_bunny.ogv" type="video/ogg" />
+
+    <object width="640" height="360" data="/ui/media/video/player.swf" type="application/x-shockwave-flash">
+      <!-- Firefox uses the `data` attribute above, IE/Safari uses the param below -->
+      <param value="/ui/media/video/player.swf" name="movie" />
+      <param value="autostart=true&amp;controlbar=over&amp;image=/ui/media/video/big-buck-bunny_poster.jpg&amp;file=/ui/media/video/big_buck_bunny.mp4" name="flashvars" />
+      <!-- fallback image -->
+      <img width="640" height="360" title="No video playback capabilities, please download the video below" alt="Big Buck Bunny" src="/ui/media/video/big-buck-bunny_poster.jpg" />
+	  </object>
+    
+  </video>
+  <p>
+    <strong>Download video:</strong> 
+    <a href="/ui/media/video/big_buck_bunny.mp4">MP4 format</a> | 
+    <a href="/ui/media/video/big_buck_bunny.ogv">Ogg format</a> | 
+    <a href="/ui/media/video/big_buck_bunny.webm">WebM format</a>
+  </p>
+</p>
