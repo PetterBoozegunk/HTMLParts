@@ -98,23 +98,28 @@
             rnrObject.response.writeHead(rnrObject.statusCode, rnrObject.headers);
             rnrObject.response.end(result);
         },
-        statCallback : function () {
-            var rnrObject = this,
-                args = arguments,
-                stat = args[1],
-                etag = stat ? stat.size + "-" + Date.parse(stat.mtime) : "";
+        setEtag: function (rnrObject, stat) {
+            var etag = stat ? stat.size + "-" + Date.parse(stat.mtime) : "";
 
             if (etag) {
                 rnrObject.headers["Last-Modified"] = stat.mtime;
                 rnrObject.etag = etag;
             }
 
+            return etag;
+        },
+        cacheCheck: function (rnrObject, etag) {
             if (rnrObject.request.headers["if-none-match"] === etag) {
-                rnrObject.response.statusCode = 304;
-                rnrObject.response.end();
+                server["304"](rnrObject);
             } else {
                 rnrObject.contextCallback(rnrObject, fs.readFile, [rnrObject.fullPath, rnrObject.readFileCallback]);
             }
+        },
+        statCallback : function (error, callback) {
+            var rnrObject = this,
+                etag = this.setEtag(rnrObject, callback);
+
+            this.cacheCheck(rnrObject, etag);
         },
         exists : function (exists) {
             var rnrObject = this;
@@ -131,12 +136,10 @@
             if (error) {
                 server["500"](rnrObject, error);
             } else {
-                rnrObject.data = data;
-                rnrObject.statusCode = 200;
-                server["200"](rnrObject);
+                server["200"](rnrObject, data);
             }
         },
-        readFileInclude : function (error, data) {
+        setCurrentInclude: function (error, data) {
             var rnrObject = this;
 
             if (error) {
@@ -144,42 +147,55 @@
             } else {
                 rnrObject.currentInclude = data.toString("utf-8");
             }
+        },
+        readFileInclude : function (error, data) {
+            var rnrObject = this;
+
+            this.setCurrentInclude(error, data);
 
             rnrObject.newdata = rnrObject.data.replace(rnrObject.includes[0], rnrObject.currentInclude);
             rnrObject.data = rnrObject.newdata;
+
             phtml.getIncludes(rnrObject);
+        },
+
+        setContextCallbackArgsArray: function (context, argsArray, callback) {
+            argsArray.pop();
+
+            argsArray.push(function () {
+                var args = arguments;
+
+                callback.apply(context, args);
+            });
+
+            return argsArray;
         },
         contextCallback : function (context, func, argsArray) {
             var callback = (argsArray instanceof Array && argsArray.length) ? argsArray[argsArray.length - 1] : null;
 
             if (typeof callback === "function") {
-                argsArray.pop();
-
-                argsArray.push(function () {
-                    var args = arguments;
-
-                    callback.apply(context, args);
-                });
+                argsArray = this.setContextCallbackArgsArray(context, argsArray, callback);
             }
 
             func.apply(context, argsArray);
         },
-        setPaths: function (that) {
-            this.reqUrl = (that.request.url === "/") ? "/" + settings.defaultfile : that.request.url;
-            this.pathName = url.parse(that.reqUrl).pathname;
-            this.fullPath = path.join(process.cwd(), that.pathName);
+
+        setPaths: function (rnrObject) {
+            this.reqUrl = (rnrObject.request.url === "/") ? "/" + settings.defaultfile : rnrObject.request.url;
+            this.pathName = url.parse(rnrObject.reqUrl).pathname;
+            this.fullPath = path.join(process.cwd(), rnrObject.pathName);
         },
-        setHeaders: function (that) {
-            this.headers = server.headers.get(that.fullPath);
+        setHeaders: function (rnrObject) {
+            this.headers = server.headers.get(rnrObject.fullPath);
         },
         init: function (request, response) {
-            var that = this;
+            var rnrObject = this;
 
             this.request = request;
             this.response = response;
 
-            this.setPaths(that);
-            this.setHeaders(that);
+            this.setPaths(rnrObject);
+            this.setHeaders(rnrObject);
         }
     };
 
@@ -192,12 +208,22 @@
 
             rnrObject.contextCallback(rnrObject, zlib.gzip, [buffe, rnrObject.gzip]);
         },
-        "200": function (rnrObject) {
+        set200 : function (rnrObject, data) {
+            rnrObject.data = data;
+            rnrObject.statusCode = 200;
+        },
+        "200": function (rnrObject, data) {
+            server.set200(rnrObject, data);
+
             if (phtml.isPhtml(rnrObject)) {
                 phtml.setup(rnrObject);
             } else {
                 server.gzip(rnrObject);
             }
+        },
+        "304": function (rnrObject) {
+            rnrObject.response.statusCode = 304;
+            rnrObject.response.end();
         },
         "404": function (rnrObject) {
             rnrObject.data = "404 - file not found";
@@ -237,11 +263,13 @@
                 server.headers.setExpires(now, headers);
             },
             setup: function (fullPath) {
-                return {
-                    "Content-Type": server.headers.getType(fullPath),
-                    "Content-Encoding": "gzip",
-                    "Cache-Control": "public, max-age=345600" // 4 days
-                };
+                var headers = {
+                        "Content-Type": server.headers.getType(fullPath),
+                        "Content-Encoding": "gzip",
+                        "Cache-Control": "public, max-age=345600" // 4 days
+                    };
+
+                return headers;
             },
             get: function (fullPath) {
                 var headers = server.headers.setup(fullPath);
