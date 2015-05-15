@@ -19,6 +19,9 @@
         server,
 
         phtml = {
+            isPhtml : function (rnrObject) {
+                return /\.phtml$/.test(rnrObject.fullPath);
+            },
             setupLayout: function (rnrObject, data) {
                 var layoutData = data.toString("utf-8"),
                     fileContent = rnrObject.data.replace(matchLayout, "").trim(),
@@ -51,46 +54,35 @@
                 rnrObject.contextCallback(rnrObject, fs.readFile, [fullPath, rnrObject.readFileInclude]);
             },
             getIncludes: function (rnrObject) {
-                var hasIncludes = rnrObject.data.match(matchIncludes);
+                rnrObject.includes = rnrObject.data.match(matchIncludes);
 
-                if (hasIncludes) {
-                    rnrObject.includes = hasIncludes;
+                if (rnrObject.includes) {
                     phtml.getInclude(rnrObject);
                 } else {
                     server.gzip(rnrObject);
+                }
+            },
+            checkLayout: function (rnrObject) {
+                if (rnrObject.layout) {
+                    rnrObject.layout = rnrObject.layout.join();
+
+                    phtml.getLayout(rnrObject);
+                } else {
+                    phtml.getIncludes(rnrObject, 0);
                 }
             },
             setup: function (rnrObject) {
                 rnrObject.data = rnrObject.data.toString("utf-8");
 
                 rnrObject.layout = rnrObject.data.match(matchLayout);
-                rnrObject.includes = rnrObject.data.match(matchIncludes);
 
-                if (rnrObject.layout) {
-                    rnrObject.layout = rnrObject.layout.join();
-
-                    phtml.getLayout(rnrObject);
-                } else if (rnrObject.includes) {
-                    phtml.getIncludes(rnrObject, 0);
-                } else {
-                    server.gzip(rnrObject);
-                }
-            },
-            isPhtml : function (rnrObject) {
-                return /\.phtml$/.test(rnrObject.fullPath);
+                phtml.checkLayout(rnrObject);
             }
         },
 
 // ReSharper disable once InconsistentNaming
         RnRObject = function (request, response) {
-            var that = this;
-
-            this.request = request;
-            this.response = response;
-            this.reqUrl = (that.request.url === "/") ? "/" + settings.defaultfile : that.request.url;
-            this.pathName = url.parse(that.reqUrl).pathname;
-            this.fullPath = path.join(process.cwd(), that.pathName);
-            this.headers = server.getHeaders(that.fullPath);
+            this.init(request, response);
         },
         createRnRObject = function (request, response) {// RnR = Request aNd Response
             return new RnRObject(request, response);
@@ -171,6 +163,23 @@
             }
 
             func.apply(context, argsArray);
+        },
+        setPaths: function (that) {
+            this.reqUrl = (that.request.url === "/") ? "/" + settings.defaultfile : that.request.url;
+            this.pathName = url.parse(that.reqUrl).pathname;
+            this.fullPath = path.join(process.cwd(), that.pathName);
+        },
+        setHeaders: function (that) {
+            this.headers = server.headers.get(that.fullPath);
+        },
+        init: function (request, response) {
+            var that = this;
+
+            this.request = request;
+            this.response = response;
+
+            this.setPaths(that);
+            this.setHeaders(that);
         }
     };
 
@@ -202,34 +211,45 @@
             rnrObject.statusCode = 500;
             server.gzip(rnrObject);
         },
-        getType: function (fullPath) {
-            var type = "text/plain",
-                tlc = fullPath.toLowerCase(),
-                file = tlc.match(/\.[a-z\d]+$/);
+        headers : {
+            getType: function (fullPath) {
+                var type = "text/plain",
+                    file = fullPath.toLowerCase().match(/\.[a-z\d]+$/);
 
-            if (mimetypes[file]) {
-                type = mimetypes[file];
-            }
+                if (mimetypes[file]) {
+                    type = mimetypes[file];
+                }
 
-            return type;
-        },
-        getHeaders: function (fullPath) {
-            var type = server.getType(fullPath),
+                return type;
+            },
+            setExpires : function (now, headers) {
+                var year = now.getFullYear(),
+                    month = now.getMonth(),
+                    date = now.getDate();
 
-                now = new Date(),
-                year = now.getFullYear(),
-                month = now.getMonth(),
-                date = now.getDate(),
+                headers["Expires"] = new Date(parseInt(year + 1, 10), month, date).toUTCString();
+            },
+            setTime: function (headers) {
+                var now = new Date();
 
-                headers = {
-                    "Content-Type": type,
+                headers["Date"] = now.toUTCString();
+
+                server.headers.setExpires(now, headers);
+            },
+            setup: function (fullPath) {
+                return {
+                    "Content-Type": server.headers.getType(fullPath),
                     "Content-Encoding": "gzip",
-                    "Cache-Control": "public, max-age=345600", // 4 days
-                    "Date": now.toUTCString(),
-                    "Expires": new Date(parseInt(year + 1, 10), month, date).toUTCString()
+                    "Cache-Control": "public, max-age=345600" // 4 days
                 };
+            },
+            get: function (fullPath) {
+                var headers = server.headers.setup(fullPath);
 
-            return headers;
+                server.headers.setTime(headers);
+
+                return headers;
+            }
         },
         create: function (request, response) {
             var rnrObject = createRnRObject(request, response);
