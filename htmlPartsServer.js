@@ -15,17 +15,52 @@
         matchLayout = /(<!--([\s]+)?layout\(['"]?[\w\_\.\/]+['"]?\)([\s]+)?-->)/g,
         matchIncludes = /(<!--([\s]+)?include\(['"]?[\w\_\.\/]+['"]?\)([\s]+)?-->)/g,
 
-        // ReSharper disable once JoinDeclarationAndInitializerJs (This cannot be done here... But anyone is welcome to try.)
+// ReSharper disable once JoinDeclarationAndInitializerJs
         server,
-        resp = {
-            gzip: function (rnrObject) {
-                var buffe = new Buffer(rnrObject.data, "utf-8");
 
-                rnrObject.headers.ETag = rnrObject.etag;
+        phtml = {
+            setupLayout: function (rnrObject, data) {
+                var layoutData = data.toString("utf-8"),
+                    fileContent = rnrObject.data.replace(matchLayout, "").trim(),
+                    newData = layoutData.replace(/<\!--\s\[phtml\:content\]\s-->/, fileContent);
 
-                rnrObject.contextCallback(rnrObject, zlib.gzip, [buffe, rnrObject.gzip]);
+                rnrObject.data = newData.trim();
+
+                phtml.getIncludes(rnrObject);
             },
-            handlePHtml: function (rnrObject) {
+            setLayout: function (error, data) {
+                var rnrObject = this;
+
+                if (error) {
+                    server["500"](rnrObject, error);
+                } else {
+                    phtml.setupLayout(rnrObject, data);
+                }
+            },
+            getLayout: function (rnrObject) {
+                var layoutUrl = rnrObject.layout.match(/["'][\w\_\/\.]+["']/).join().replace(/['"]/g, ""),
+                    fullPath = path.join(process.cwd(), layoutUrl);
+
+                rnrObject.contextCallback(rnrObject, fs.readFile, [fullPath, phtml.setLayout]);
+            },
+            getInclude: function (rnrObject) {
+                var includeUrl = rnrObject.includes[0].match(/["'][\w\_\/\.]+["']/).join().replace(/['"]/g, ""),
+                    fullPath = path.join(process.cwd(), includeUrl);
+
+                rnrObject.fullPath = fullPath;
+                rnrObject.contextCallback(rnrObject, fs.readFile, [fullPath, rnrObject.readFileInclude]);
+            },
+            getIncludes: function (rnrObject) {
+                var hasIncludes = rnrObject.data.match(matchIncludes);
+
+                if (hasIncludes) {
+                    rnrObject.includes = hasIncludes;
+                    phtml.getInclude(rnrObject);
+                } else {
+                    server.gzip(rnrObject);
+                }
+            },
+            setup: function (rnrObject) {
                 rnrObject.data = rnrObject.data.toString("utf-8");
 
                 rnrObject.layout = rnrObject.data.match(matchLayout);
@@ -34,36 +69,19 @@
                 if (rnrObject.layout) {
                     rnrObject.layout = rnrObject.layout.join();
 
-                    server.getLayout(rnrObject);
+                    phtml.getLayout(rnrObject);
                 } else if (rnrObject.includes) {
-                    server.getIncludes(rnrObject, 0);
+                    phtml.getIncludes(rnrObject, 0);
                 } else {
-                    resp.gzip(rnrObject);
+                    server.gzip(rnrObject);
                 }
             },
-            "200": function (rnrObject) {
-                var isPHtml = /\.phtml$/.test(rnrObject.fullPath);
-
-                if (isPHtml) {
-                    resp.handlePHtml(rnrObject);
-                } else {
-                    resp.gzip(rnrObject);
-                }
-            },
-            "404": function (rnrObject) {
-                rnrObject.data = "404 - file not found";
-
-                rnrObject.statusCode = 404;
-                resp.gzip(rnrObject);
-            },
-            "500": function (rnrObject, error) {
-                rnrObject.data = (error || "Server error") + "\n";
-
-                rnrObject.statusCode = 500;
-                resp.gzip(rnrObject);
+            isPhtml : function (rnrObject) {
+                return /\.phtml$/.test(rnrObject.fullPath);
             }
         },
-        // ReSharper disable once InconsistentNaming (RnRObject is a constructor but Reshaper does not get that for some reason...)
+
+// ReSharper disable once InconsistentNaming
         RnRObject = function (request, response) {
             var that = this;
 
@@ -110,7 +128,7 @@
             var rnrObject = this;
 
             if (!exists) {
-                resp["404"](rnrObject);
+                server["404"](rnrObject);
             } else {
                 rnrObject.contextCallback(rnrObject, fs.stat, ["." + rnrObject.request.url, rnrObject.statCallback]);
             }
@@ -119,11 +137,11 @@
             var rnrObject = this;
 
             if (error) {
-                resp["500"](rnrObject, error);
+                server["500"](rnrObject, error);
             } else {
                 rnrObject.data = data;
                 rnrObject.statusCode = 200;
-                resp["200"](rnrObject);
+                server["200"](rnrObject);
             }
         },
         readFileInclude : function (error, data) {
@@ -137,7 +155,7 @@
 
             rnrObject.newdata = rnrObject.data.replace(rnrObject.includes[0], rnrObject.currentInclude);
             rnrObject.data = rnrObject.newdata;
-            server.getIncludes(rnrObject);
+            phtml.getIncludes(rnrObject);
         },
         contextCallback : function (context, func, argsArray) {
             var callback = (argsArray instanceof Array && argsArray.length) ? argsArray[argsArray.length - 1] : null;
@@ -157,49 +175,32 @@
     };
 
     server = {
-        trim: function (str) {
-            return str.toString().replace(/(^\s+|\s+$)/g, "");
+        gzip: function (rnrObject) {
+// ReSharper disable once UndeclaredGlobalVariableUsing
+            var buffe = new Buffer(rnrObject.data, "utf-8");
+
+            rnrObject.headers.ETag = rnrObject.etag;
+
+            rnrObject.contextCallback(rnrObject, zlib.gzip, [buffe, rnrObject.gzip]);
         },
-        setupLayout: function (rnrObject, data) {
-            var layoutData = data.toString("utf-8"),
-                fileContent = server.trim(rnrObject.data.replace(matchLayout, "")),
-                newData = layoutData.replace(/<\!--\s\[phtml\:content\]\s-->/, fileContent);
-
-            rnrObject.data = server.trim(newData);
-
-            server.getIncludes(rnrObject);
-        },
-        setLayout: function (error, data) {
-            var rnrObject = this;
-
-            if (error) {
-                resp["500"](rnrObject, error);
+        "200": function (rnrObject) {
+            if (phtml.isPhtml(rnrObject)) {
+                phtml.setup(rnrObject);
             } else {
-                server.setupLayout(rnrObject, data);
+                server.gzip(rnrObject);
             }
         },
-        getLayout: function (rnrObject) {
-            var layoutUrl = rnrObject.layout.match(/["'][\w\_\/\.]+["']/).join().replace(/['"]/g, ""),
-                fullPath = path.join(process.cwd(), layoutUrl);
+        "404": function (rnrObject) {
+            rnrObject.data = "404 - file not found";
 
-            rnrObject.contextCallback(rnrObject, fs.readFile, [fullPath, server.setLayout]);
+            rnrObject.statusCode = 404;
+            server.gzip(rnrObject);
         },
-        getInclude: function (rnrObject) {
-            var includeUrl = rnrObject.includes[0].match(/["'][\w\_\/\.]+["']/).join().replace(/['"]/g, ""),
-                fullPath = path.join(process.cwd(), includeUrl);
+        "500": function (rnrObject, error) {
+            rnrObject.data = (error || "Server error") + "\n";
 
-            rnrObject.fullPath = fullPath;
-            rnrObject.contextCallback(rnrObject, fs.readFile, [fullPath, rnrObject.readFileInclude]);
-        },
-        getIncludes: function (rnrObject) {
-            var hasIncludes = rnrObject.data.match(matchIncludes);
-
-            if (hasIncludes) {
-                rnrObject.includes = hasIncludes;
-                server.getInclude(rnrObject);
-            } else {
-                resp.gzip(rnrObject);
-            }
+            rnrObject.statusCode = 500;
+            server.gzip(rnrObject);
         },
         getType: function (fullPath) {
             var type = "text/plain",
